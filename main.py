@@ -1,64 +1,75 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import numpy as np
+from utils.forecasting import forecast_energy
+from utils.anomaly import detect_anomalies
+from utils.billing import calculate_bill
 
-st.set_page_config(page_title="Smart Energy Analyzer", layout="wide")
+st.set_page_config(page_title="Smart Energy Analyzer Pro", layout="wide")
 
-st.title("⚡ Smart Energy Analyzer")
+st.title("⚡ Smart Energy Analyzer PRO")
 
-st.markdown("Upload your energy consumption data to analyze usage trends and insights.")
+uploaded_file = st.file_uploader("Upload Energy Data CSV", type=["csv"])
 
-# Upload File
-uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
-
-if uploaded_file is not None:
+if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
-    st.subheader("📄 Data Preview")
-    st.dataframe(df)
-
-    # Ensure correct columns exist
     if "Date" in df.columns and "Consumption" in df.columns:
 
         df["Date"] = pd.to_datetime(df["Date"])
         df = df.sort_values("Date")
 
-        # Line Chart
-        st.subheader("📈 Energy Usage Over Time")
+        # ===== Dashboard =====
+        st.subheader("📊 Overview")
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Units", f"{df['Consumption'].sum():.2f}")
+        col2.metric("Average Daily Usage", f"{df['Consumption'].mean():.2f}")
+        col3.metric("Peak Usage", f"{df['Consumption'].max():.2f}")
+
+        # ===== Visualization =====
+        st.subheader("📈 Usage Trend")
         fig = px.line(df, x="Date", y="Consumption", markers=True)
         st.plotly_chart(fig, use_container_width=True)
 
-        # Statistics
-        st.subheader("📊 Key Statistics")
+        # ===== Anomaly Detection =====
+        st.subheader("🤖 Anomaly Detection")
+        df_anomaly = detect_anomalies(df.copy())
 
-        col1, col2, col3 = st.columns(3)
-
-        col1.metric("Total Consumption", f"{df['Consumption'].sum():.2f} kWh")
-        col2.metric("Average Consumption", f"{df['Consumption'].mean():.2f} kWh")
-        col3.metric("Maximum Consumption", f"{df['Consumption'].max():.2f} kWh")
-
-        # Peak Usage Day
-        peak_day = df.loc[df["Consumption"].idxmax()]
-
-        st.subheader("🔥 Peak Usage Day")
-        st.write(f"Date: {peak_day['Date'].date()}")
-        st.write(f"Consumption: {peak_day['Consumption']} kWh")
-
-        # Monthly Aggregation
-        df["Month"] = df["Date"].dt.to_period("M")
-        monthly = df.groupby("Month")["Consumption"].sum().reset_index()
-        monthly["Month"] = monthly["Month"].astype(str)
-
-        st.subheader("📅 Monthly Consumption")
-        fig2 = px.bar(monthly, x="Month", y="Consumption")
+        fig2 = px.scatter(
+            df_anomaly,
+            x="Date",
+            y="Consumption",
+            color="Anomaly"
+        )
         st.plotly_chart(fig2, use_container_width=True)
 
+        # ===== Forecasting =====
+        st.subheader("🔮 Energy Forecast")
+        forecast_df = forecast_energy(df, days=7)
+
+        fig3 = px.line(forecast_df, x="Date",
+                       y="Forecasted_Consumption")
+        st.plotly_chart(fig3, use_container_width=True)
+
+        # ===== Bill Estimation =====
+        st.subheader("💰 Estimated Electricity Bill")
+
+        total_units = df["Consumption"].sum()
+        bill = calculate_bill(total_units)
+
+        st.success(f"Estimated Bill: ₹ {bill:.2f}")
+
+        # ===== Download Report =====
+        csv = df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "📥 Download Processed Data",
+            data=csv,
+            file_name="processed_energy_data.csv",
+            mime="text/csv"
+        )
+
     else:
-        st.error("CSV must contain 'Date' and 'Consumption' columns.")
-
+        st.error("CSV must contain Date and Consumption columns.")
 else:
-    st.info("Upload a CSV file to begin analysis.")
-
-st.markdown("---")
-st.markdown("Developed by Sukirthan V 🚀")
+    st.info("Upload your CSV file to start analysis.")
